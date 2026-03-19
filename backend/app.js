@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
@@ -6,66 +7,83 @@ const cors = require('cors');
 
 const cloudinary = require('./config/cloudinary');
 const connectDB = require('./config/database');
+
+// Routes
 const authRoutes = require('./routes/auth');
 const petitionRoutes = require('./routes/petitions');
 const volunteerRoutes = require('./routes/volunteers');
 const complaintRoutes = require('./routes/complaintRoutes');
 const pollsRoutes = require('./routes/polls');
-
 const reportsRoutes = require('./routes/reports');
-const {protect} =require('./middleware/auth');
+
+// Middleware
+const { protect } = require('./middleware/auth');
 
 const app = express();
 
-// Connect to database
+
+// ======================
+// ✅ Connect Database
+// ======================
 connectDB();
 
-// Test Cloudinary connection (runs once on startup)
+
+// ======================
+// ✅ Cloudinary Test
+// ======================
 (async () => {
   try {
     const res = await cloudinary.api.ping();
-    console.log('Cloudinary Connected:', res.status); // should log "ok"
+    console.log('Cloudinary Connected:', res.status);
   } catch (err) {
     console.error('Cloudinary connection failed:', err.message);
   }
 })();
 
-// CORS configuration
+
+// ======================
+// ✅ CORS Setup
+// ======================
 const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://127.0.0.1:3000'
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 };
 
 app.use(cors(corsOptions));
 
-// Middleware
+
+// ======================
+// ✅ Body Parsers
+// ======================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+
+// ======================
+// ✅ PUBLIC ROUTES (NO AUTH)
+// ======================
 app.use('/api/auth', authRoutes);
-app.use('/api/reports', reportsRoutes);
-
-//To protect the all routes below this with JWT
-app.use(protect);
-
-app.use('/api/petitions', petitionRoutes);
-app.use('/api/volunteers', volunteerRoutes);
-app.use('/api/complaints', complaintRoutes);
-app.use('/api/polls', pollsRoutes);
 
 
-
-// Protected Routes (require authentication)
+// ======================
+// ✅ PROTECTED ROUTES (JWT REQUIRED)
+// ======================
+app.use('/api/petitions', protect, petitionRoutes);
 app.use('/api/volunteers', protect, volunteerRoutes);
+app.use('/api/complaints', protect, complaintRoutes);
+app.use('/api/polls', protect, pollsRoutes);
+app.use('/api/reports', protect, reportsRoutes);
 
-// Health check endpoint
+
+// ======================
+// ✅ HEALTH CHECK
+// ======================
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -75,43 +93,55 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// bcrypt test endpoint
+
+// ======================
+// ✅ BCRYPT TEST
+// ======================
 app.get('/api/test-bcrypt', async (req, res) => {
   try {
     const password = 'testpassword123';
     const hash = await bcrypt.hash(password, 10);
     const isMatch = await bcrypt.compare(password, hash);
-    
+
     res.json({
       bcryptTest: 'Successful',
-      correctPasswordMatch: isMatch,
-      message: 'bcrypt is working correctly!'
+      correctPasswordMatch: isMatch
     });
   } catch (error) {
     res.status(500).json({ error: 'bcrypt test failed' });
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Authentication server error' });
-});
 
-// 404 handler
+// ======================
+// ❌ 404 HANDLER
+// ======================
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+
+// ======================
+// ❌ ERROR HANDLER
+// ======================
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Server error' });
+});
+
+
+// ======================
+// ✅ SERVER START
+// ======================
 const PORT = process.env.PORT || 5000;
 
+app.listen(PORT, async () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 
-
-app.listen(PORT, () => {
-  (async () => {
-    console.log(`Authentication server running on port ${PORT}`);
-    await mongoose.connection.asPromise();
-    const dbState = mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected';
-    console.log(`Database: ${dbState}`);
-  })();
+  await mongoose.connection.asPromise();
+  console.log(
+    `📦 Database: ${
+      mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+    }`
+  );
 });
